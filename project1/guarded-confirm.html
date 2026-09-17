@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Guarded Confirm — a Fitts' Law study on canvas</title>
+<style>
+  :root{
+    --bg:#faf9f6; --surface:#fff; --surface-2:#f1eee8; --border:#e2ddd3;
+    --text:#1b1a18; --muted:#6a6558; --accent:#2f6d5b; --accent-soft:#e2eee9;
+    --warn:#a8531f; --bad:#b0342b; --good:#2f7d52; --grid:#e7e2d8;
+    --screen:#ffffff; --bar:#f3f1ec; --key:#eceae4; --keyline:#dcd7cc; --cancel:#e8e5de;
+    --shadow:0 1px 2px rgba(27,26,24,.06),0 10px 28px rgba(27,26,24,.06);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#15161a; --surface:#1e2025; --surface-2:#282b31; --border:#363a41;
+    --text:#eceef2; --muted:#9aa0aa; --accent:#5fb89c; --accent-soft:#1f3a33;
+    --warn:#e0904f; --bad:#e0736a; --good:#6bbd8c; --grid:#2f333a;
+    --screen:#1a1c21; --bar:#23262c; --key:#2a2d33; --keyline:#3a3e46; --cancel:#2e323a;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px rgba(0,0,0,.35);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#15161a; --surface:#1e2025; --surface-2:#282b31; --border:#363a41;
+    --text:#eceef2; --muted:#9aa0aa; --accent:#5fb89c; --accent-soft:#1f3a33;
+    --warn:#e0904f; --bad:#e0736a; --good:#6bbd8c; --grid:#2f333a;
+    --screen:#1a1c21; --bar:#23262c; --key:#2a2d33; --keyline:#3a3e46; --cancel:#2e323a;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.55;
+       -webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+  .wrap{max-width:900px;margin:0 auto;padding:22px 18px 64px}
+  header.top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--border);
+             padding-bottom:13px;margin-bottom:20px}
+  header.top h1{font-size:19px;margin:0;letter-spacing:-.01em}
+  header.top .sub{color:var(--muted);font-size:13px}
+  .spacer{flex:1 1 auto}
+  nav.tabs{display:flex;gap:4px;flex-wrap:wrap}
+  nav.tabs button{font:inherit;font-size:13px;padding:5px 11px;border-radius:999px;border:1px solid transparent;
+                  background:transparent;color:var(--muted);cursor:pointer}
+  nav.tabs button[aria-selected="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--border)}
+  nav.tabs button:disabled{opacity:.4;cursor:not-allowed}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .card h2{font-size:15px;margin:0 0 4px;letter-spacing:-.01em}
+  .card h3{font-size:12px;margin:18px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .card p.hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+  label.field{display:block;margin-bottom:14px}
+  label.field>span{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;letter-spacing:.04em;text-transform:uppercase}
+  input,select{font:inherit;width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+  input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:0 16px}
+  button.btn{font:inherit;font-weight:500;padding:9px 16px;border-radius:9px;cursor:pointer;
+             border:1px solid var(--border);background:var(--surface-2);color:var(--text)}
+  button.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .note{font-size:12.5px;color:var(--muted)}
+  .pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:var(--surface-2);color:var(--muted);border:1px solid var(--border)}
+  .pill.on{color:var(--good)}
+  ul.plain{margin:8px 0 0;padding-left:18px} ul.plain li{margin-bottom:5px}
+  .scenario{border-left:3px solid var(--accent);padding-left:14px}
+  .scenario p{margin:0 0 8px} .scenario p:last-child{margin:0}
+
+  #taskScreen,#resultsScreen,#dataScreen{display:none}
+  .taskbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-bottom:9px}
+  .taskbar b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+  .progress{height:4px;background:var(--surface-2);border-radius:99px;overflow:hidden;margin-bottom:14px}
+  .progress>i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s ease}
+  #stageWrap{display:flex;justify-content:center}
+  #stageOuter{position:relative;border-radius:30px;overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--border)}
+  #stage{display:block;touch-action:none;user-select:none;cursor:default}
+  #overlay{position:absolute;inset:0;background:var(--surface);display:flex;flex-direction:column;align-items:center;
+           justify-content:center;gap:10px;text-align:center;padding:28px}
+  #overlay.hidden{display:none}
+  #overlay .big{font-size:21px;font-weight:650;letter-spacing:-.02em}
+  #overlay .small{color:var(--muted);font-size:13px;max-width:30ch}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:12px}
+  .stat{background:var(--surface-2);border-radius:10px;padding:11px 13px}
+  .stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .stat .v{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .stat .u{font-size:12px;color:var(--muted);font-weight:400}
+  .tablescroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+  th,td{text-align:right;padding:7px 9px;border-bottom:1px solid var(--border);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  tbody tr:last-child td{border-bottom:none}
+  tr.best td{background:var(--accent-soft)}
+  .plotbox{overflow-x:auto} svg.plot{display:block;max-width:100%;height:auto}
+  .eq{font-family:var(--mono);font-size:13px;background:var(--surface-2);padding:10px 12px;border-radius:8px;overflow-x:auto;white-space:nowrap}
+  .rec{background:var(--accent-soft);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:14px}
+  .rec p{margin:0 0 10px} .rec p:last-child{margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>Guarded Confirm</h1>
+  <span class="sub">Fitts' Law for irreversible actions</span>
+  <span class="spacer"></span>
+  <nav class="tabs" id="tabs">
+    <button data-screen="setup" aria-selected="true">Brief</button>
+    <button data-screen="results" aria-selected="false" id="tabResults" disabled>Results</button>
+    <button data-screen="data" aria-selected="false">All sessions</button>
+  </nav>
+</header>
+
+<!-- ============ BRIEF ============ -->
+<section id="setupScreen">
+  <div class="card">
+    <h2>Scenario</h2>
+    <div class="scenario note">
+      <p><b>User &amp; context.</b> Someone sending a peer-to-peer payment on a large phone — splitting a bill, paying rent, sending money home. Standing on a train or walking out of a restaurant: one hand occupied, one thumb on the glass, attention arriving in two-second glances.</p>
+      <p><b>The problem.</b> The last tap in the flow is irreversible. It must be fast, because it is the 99% case and fiddly confirmations are the top complaint in these apps. It must also be hard to hit by accident, because it sits beside Cancel, and a slip in that direction throws away a half-finished transfer while a slip the other way sends money that cannot be recalled.</p>
+      <p><b>What designers actually argue about.</b> Where the confirm button goes (top nav bar, docked under the keypad, or down at the bottom edge behind the home-indicator gutter), how tall it is (Material's 48dp floor, or below it as dense banking layouts ship, or comfortably above), and how much empty space guards it from its neighbour — a number that is almost always eyeballed.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Innovation: pricing the guard gap</h2>
+    <p class="hint">What this study adds to a textbook Fitts task.</p>
+    <ul class="plain note">
+      <li>Fitts' Law on its own always concludes <i>bigger, closer, no gap</i> — because movement time is its only currency. For an irreversible action that conclusion is wrong.</li>
+      <li>So this instrument treats Confirm and its neighbour as a <b>target pair</b> and logs two outcomes: movement time, and what the tap actually landed on.</li>
+      <li>It then reports an <b>expected cost per payment</b>: <span style="font-family:var(--mono)">E[cost] = MT + p(slip) × recovery cost</span>. Guard spacing buys down p(slip) and sells off MT, and this puts both on the same axis so a layout can be chosen rather than argued over. You set the recovery cost below.</li>
+      <li>Targets are rectangles approached at an angle, so width is the target's <b>projected extent along the movement axis</b> (W′ = w·|uₓ| + h·|u_y|), not its nominal width.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Experimental design</h2>
+    <p class="hint">Fully crossed, within-subjects, block order randomized per participant.</p>
+    <div class="tablescroll">
+      <table><thead><tr><th>Factor</th><th style="text-align:left">Levels</th><th style="text-align:left">Realises</th></tr></thead>
+      <tbody>
+        <tr><td><b>Distance A</b></td><td style="text-align:left">Docked · Bottom edge · Top nav</td><td style="text-align:left">Three real placements, ≈110 / 200 / 470 px from the keypad</td></tr>
+        <tr><td><b>Width W</b></td><td style="text-align:left">36 · 48 · 64 px tall</td><td style="text-align:left">Below, at, and above the 48dp touch-target floor</td></tr>
+        <tr><td><b>Guard gap</b></td><td style="text-align:left">8 · 40 px</td><td style="text-align:left">Tight vs guarded spacing to Cancel</td></tr>
+      </tbody></table>
+    </div>
+    <p class="note" style="margin-top:10px">3 × 3 × 2 = 18 blocks. Within a block, amplitude still varies a little with which keypad digit you finish on, which gives the regression a continuous spread of ID rather than three isolated points.</p>
+  </div>
+
+  <div class="card">
+    <h2>Participant</h2>
+    <p class="hint">Use a code, not a name. Saved sessions are visible to anyone who can open this page.</p>
+    <div class="grid2">
+      <label class="field"><span>Participant ID</span><input type="text" id="pid" placeholder="e.g. P01" autocomplete="off" spellcheck="false"></label>
+      <label class="field"><span>Input</span><select id="device">
+        <option value="touch-thumb">Phone, one-handed thumb</option>
+        <option value="touch-index">Touchscreen, index finger</option>
+        <option value="mouse">Mouse</option><option value="trackpad">Trackpad</option><option value="stylus">Stylus</option>
+      </select></label>
+      <label class="field"><span>Posture</span><select id="posture">
+        <option value="seated">Seated at a desk</option><option value="standing">Standing / holding device</option>
+        <option value="moving">Walking or on transit</option></select></label>
+      <label class="field"><span>Payments per block</span><select id="reps">
+        <option>2</option><option selected>3</option><option>4</option></select></label>
+      <label class="field"><span>Cost of one slip (seconds)</span><input type="number" id="penalty" value="15" min="0" max="600" step="1"></label>
+    </div>
+    <div class="btnrow">
+      <button class="btn primary" id="startBtn">Start session</button>
+      <span id="storageState" class="pill">storage: checking…</span>
+    </div>
+    <p class="note" style="margin-top:12px">Go as fast as you comfortably can while staying accurate — the way you'd send a payment you actually care about. Don't slow down to be perfect; don't get sloppy.</p>
+  </div>
+</section>
+
+<!-- ============ TASK ============ -->
+<section id="taskScreen">
+  <div class="taskbar">
+    <span>Block <b id="blkNow">1</b>/<b id="blkTotal">18</b></span>
+    <span>Payment <b id="trNow">1</b>/<b id="trTotal">3</b></span>
+    <span class="spacer"></span>
+    <span>Sent <b id="okCount">0</b> · Slips <b id="slipCount">0</b> · Misses <b id="missCount">0</b></span>
+    <button class="btn" id="abortBtn" style="padding:4px 10px;font-size:12px">Abort</button>
+  </div>
+  <div class="progress"><i id="progBar"></i></div>
+  <div id="stageWrap"><div id="stageOuter">
+    <canvas id="stage"></canvas>
+    <div id="overlay">
+      <div class="big" id="ovBig">Ready</div>
+      <div class="small" id="ovSmall"></div>
+      <button class="btn primary" id="ovBtn">Begin</button>
+    </div>
+  </div></div>
+</section>
+
+<!-- ============ RESULTS ============ -->
+<section id="resultsScreen">
+  <div class="card">
+    <h2>Session summary</h2><p class="hint" id="who"></p>
+    <div class="stats" id="sessionStats"></div>
+  </div>
+  <div class="card">
+    <h2>Design recommendation</h2>
+    <p class="hint">Generated from this session. One participant is a pilot, not a result.</p>
+    <div class="rec" id="recBox"></div>
+  </div>
+  <div class="card">
+    <h2>Does Fitts' Law hold here?</h2>
+    <p class="hint">Successful confirmations only, pooled and split into equal-count ID bins.</p>
+    <div class="plotbox" id="plotBox"></div>
+    <div class="eq" id="fitEq"></div>
+    <p class="note" style="margin-top:10px" id="fitNote"></p>
+  </div>
+  <div class="card">
+    <h2>Main effects</h2>
+    <div class="tablescroll" id="factorTable"></div>
+    <p class="note" style="margin-top:10px">MT is measured on successful confirmations only. Slip = landed on Cancel. Miss = landed on neither and had to try again.</p>
+  </div>
+  <div class="card">
+    <h2>All 18 layouts, ranked by expected cost</h2>
+    <div class="tablescroll" id="condTable"></div>
+  </div>
+  <div class="card">
+    <h2>Export</h2>
+    <div class="btnrow">
+      <button class="btn primary" id="csvTrials">Trial CSV (A, W, MT)</button>
+      <button class="btn" id="csvConds">Condition CSV</button>
+      <button class="btn" id="againBtn">Run another session</button>
+    </div>
+    <p class="note" style="margin-top:10px" id="saveState"></p>
+  </div>
+</section>
+
+<!-- ============ ALL SESSIONS ============ -->
+<section id="dataScreen">
+  <div class="card">
+    <h2>All saved sessions</h2>
+    <p class="hint">Every session completed on this page, pooled.</p>
+    <div class="btnrow" style="margin-bottom:14px">
+      <button class="btn" id="refreshBtn">Refresh</button>
+      <button class="btn" id="csvAll">Download all trials (CSV)</button>
+    </div>
+    <div id="allSummary" class="note">Loading…</div>
+  </div>
+  <div class="card" id="pooledCard" style="display:none">
+    <h2>Pooled fit &amp; main effects</h2>
+    <div class="plotbox" id="pooledPlot"></div>
+    <div class="eq" id="pooledEq"></div>
+    <div class="tablescroll" style="margin-top:14px" id="pooledFactors"></div>
+  </div>
+  <div class="card"><h2>Sessions</h2><div class="tablescroll" id="sessTable"></div></div>
+</section>
+
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+
+/* ==========================================================
+   Design geometry (reference phone 390 × 760)
+   ========================================================== */
+const PH={w:390,h:760};
+const KEY={cols:3,rows:4,w:90,h:70,gx:10,gy:8,x0:50,y0:300};
+const DIST={                                   // factor 1 — target distance
+  docked:{label:"Docked",  sy:h=>620},
+  edge:  {label:"Bottom edge", sy:h=>PH.h-28-h},
+  nav:   {label:"Top nav",  sy:h=>(56-h)/2}
+};
+const WIDTH={ w36:{h:36,label:"36 px"}, w48:{h:48,label:"48 px"}, w64:{h:64,label:"64 px"} };
+const GAP={ tight:8, guarded:40 };
+const BTN_W=120, CANCEL_W=96;
+const NAMES=["Maya","Dan","Priya","Ines","Tomas","Ruth","Kofi","Lena","Omar","Sofia"];
+
+/* ==========================================================
+   State
+   ========================================================== */
+const S={db:null,downloads:null,cfg:null,penalty:15000,
+  blocks:[],bi:0,ti:0,reps:3,practice:true,running:false,
+  trials:[],ok:0,slips:0,misses:0,
+  scale:1,rects:null,layout:null,
+  target:"",typed:"",lastKey:null,t0:0,missThisTrial:0,payee:"",
+  toast:null,session:null,res:null,all:[]};
+
+/* ==========================================================
+   Capabilities
+   ========================================================== */
+(async function(){
+  try{ if(window.claude&&typeof window.claude.use==="function"){
+    const [db,dl]=await Promise.all([window.claude.use("db").catch(()=>null),
+                                     window.claude.use("downloads").catch(()=>null)]);
+    S.db=db;S.downloads=dl;
+  }}catch(e){}
+  const el=$("storageState");
+  if(S.db){el.textContent="storage: shared database";el.className="pill on";}
+  else{el.textContent="storage: this browser only";el.className="pill";}
+})();
+function localLoad(){try{const r=localStorage.getItem("guard_sessions");return r?JSON.parse(r):[];}catch(e){return[];}}
+function localSave(s){try{const a=localLoad();a.push(s);localStorage.setItem("guard_sessions",JSON.stringify(a.slice(-40)));return true;}catch(e){return false;}}
+
+/* ==========================================================
+   Math
+   ========================================================== */
+const mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:NaN;
+function sd(a){if(a.length<2)return 0;const m=mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)*(v-m),0)/(a.length-1));}
+function ols(xs,ys){const n=xs.length;if(n<2)return{a:NaN,b:NaN,r2:NaN,n};
+  const mx=mean(xs),my=mean(ys);let sxy=0,sxx=0,syy=0;
+  for(let i=0;i<n;i++){sxy+=(xs[i]-mx)*(ys[i]-my);sxx+=(xs[i]-mx)**2;syy+=(ys[i]-my)**2;}
+  const b=sxx?sxy/sxx:NaN;return{a:my-b*mx,b,r2:(sxx&&syy)?(sxy*sxy)/(sxx*syy):NaN,n};}
+const fmt=(v,d=2)=>(v==null||!isFinite(v))?"–":v.toFixed(d);
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ==========================================================
+   Screens
+   ========================================================== */
+function show(n){["setup","task","results","data"].forEach(k=>{const e=$(k+"Screen");if(e)e.style.display=k===n?"block":"none";});
+  document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.screen===n?"true":"false"));
+  window.scrollTo(0,0);}
+$("tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(!b||b.disabled||S.running)return;
+  show(b.dataset.screen); if(b.dataset.screen==="data") loadAll();});
+
+/* ==========================================================
+   Canvas
+   ========================================================== */
+const cv=$("stage"), ctx=cv.getContext("2d");
+let C={};
+function readColors(){
+  const s=getComputedStyle(document.documentElement);
+  const g=n=>s.getPropertyValue(n).trim()||"#888";
+  C={screen:g("--screen"),bar:g("--bar"),key:g("--key"),keyline:g("--keyline"),
+     text:g("--text"),muted:g("--muted"),accent:g("--accent"),accentSoft:g("--accent-soft"),
+     border:g("--border"),cancel:g("--cancel"),bad:g("--bad"),warn:g("--warn"),surface2:g("--surface-2")};
+}
+try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{readColors();draw();}); }catch(e){}
+
+function sizeStage(){
+  const wrapW=document.querySelector(".wrap").clientWidth;
+  const availH=window.innerHeight-170;
+  S.scale=Math.max(.45,Math.min(1,wrapW/PH.w,availH/PH.h));
+  const dpr=Math.min(3,window.devicePixelRatio||1);
+  cv.width=Math.round(PH.w*S.scale*dpr);
+  cv.height=Math.round(PH.h*S.scale*dpr);
+  cv.style.width=(PH.w*S.scale)+"px";
+  cv.style.height=(PH.h*S.scale)+"px";
+  ctx.setTransform(S.scale*dpr,0,0,S.scale*dpr,0,0);   // draw in design units
+  draw();
+}
+window.addEventListener("resize",sizeStage);
+
+function layoutFor(l){
+  const bh=WIDTH[l.width].h, gap=GAP[l.gap];
+  const sy=DIST[l.dist].sy(bh);
+  const sx=(l.dist==="nav")?PH.w-14-BTN_W:PH.w-20-BTN_W;
+  const cx=sx-gap-CANCEL_W;
+  const keys=[];
+  const labels=["1","2","3","4","5","6","7","8","9","","0","<"];
+  for(let r=0;r<KEY.rows;r++)for(let c=0;c<KEY.cols;c++){
+    const lab=labels[r*KEY.cols+c]; if(lab==="")continue;
+    const x=KEY.x0+c*(KEY.w+KEY.gx), y=KEY.y0+r*(KEY.h+KEY.gy);
+    keys.push({label:lab,x,y,w:KEY.w,h:KEY.h,cx:x+KEY.w/2,cy:y+KEY.h/2});
+  }
+  return {keys,
+    send:{x:sx,y:sy,w:BTN_W,h:bh,cx:sx+BTN_W/2,cy:sy+bh/2},
+    cancel:{x:cx,y:sy,w:CANCEL_W,h:bh,cx:cx+CANCEL_W/2,cy:sy+bh/2},
+    navBar:l.dist==="nav"};
+}
+
+function rr(x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);     ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function fillRR(x,y,w,h,r,fill,stroke){ rr(x,y,w,h,r); if(fill){ctx.fillStyle=fill;ctx.fill();} if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke();} }
+function text(str,x,y,size,color,align,weight){
+  ctx.fillStyle=color; ctx.textAlign=align||"center"; ctx.textBaseline="middle";
+  ctx.font=(weight||500)+" "+size+"px "+getComputedStyle(document.body).fontFamily;
+  ctx.fillText(str,x,y);
+}
+
+function draw(){
+  if(!C.screen) readColors();
+  const R=S.rects;
+  ctx.fillStyle=C.screen; ctx.fillRect(0,0,PH.w,PH.h);
+  if(!R){ text("Ready",PH.w/2,PH.h/2,18,C.muted); return; }
+
+  // top chrome
+  ctx.fillStyle=C.bar; ctx.fillRect(0,0,PH.w,56);
+  ctx.strokeStyle=C.border; ctx.beginPath(); ctx.moveTo(0,56.5); ctx.lineTo(PH.w,56.5); ctx.stroke();
+  if(!R.navBar) text("New payment",PH.w/2,28,15,C.text,"center",600);
+
+  // prompt
+  text("Send to "+S.payee,PH.w/2,92,13,C.muted);
+  text("$"+S.target,PH.w/2,128,34,C.text,"center",700);
+
+  // entry line
+  const done=S.typed===S.target;
+  ctx.strokeStyle=done?C.accent:C.border; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(90,208); ctx.lineTo(PH.w-90,208); ctx.stroke();
+  text(S.typed===""?"tap the amount":"$"+S.typed, PH.w/2,188,24,done?C.text:C.muted);
+
+  // keypad
+  R.keys.forEach(k=>{
+    fillRR(k.x,k.y,k.w,k.h,12,C.key,C.keyline);
+    text(k.label==="<"?"⌫":k.label,k.cx,k.cy,24,C.text,"center",500);
+  });
+
+  // cancel + send
+  fillRR(R.cancel.x,R.cancel.y,R.cancel.w,R.cancel.h,10,C.cancel,C.keyline);
+  text("Cancel",R.cancel.cx,R.cancel.cy,Math.min(15,R.cancel.h*0.38),C.muted,"center",500);
+
+  fillRR(R.send.x,R.send.y,R.send.w,R.send.h,10,done?C.accent:C.surface2,done?C.accent:C.border);
+  text("Send",R.send.cx,R.send.cy,Math.min(15,R.send.h*0.38),done?"#ffffff":C.muted,"center",650);
+
+  // home indicator
+  if(!R.navBar){ fillRR(PH.w/2-60,PH.h-10,120,4,2,C.keyline); }
+
+  // toast
+  if(S.toast){
+    ctx.fillStyle=S.toast.kind==="slip"?C.bad:C.warn;
+    ctx.globalAlpha=.94; ctx.fillRect(0,0,PH.w,34); ctx.globalAlpha=1;
+    text(S.toast.msg,PH.w/2,17,13,"#ffffff","center",600);
+  }
+}
+function toast(kind,msg){ S.toast={kind,msg}; draw(); setTimeout(()=>{S.toast=null;draw();},420); }
+
+/* ==========================================================
+   Session flow
+   ========================================================== */
+$("startBtn").addEventListener("click",start);
+$("againBtn").addEventListener("click",()=>show("setup"));
+$("abortBtn").addEventListener("click",()=>{ if(confirm("Abort? Collected trials are discarded.")){S.running=false;show("setup");} });
+
+function allLayouts(){
+  const out=[];
+  Object.keys(DIST).forEach(dist=>Object.keys(WIDTH).forEach(width=>Object.keys(GAP).forEach(gap=>out.push({dist,width,gap}))));
+  return out;
+}
+function start(){
+  const pid=$("pid").value.trim();
+  if(!pid){alert("Please enter a participant ID.");$("pid").focus();return;}
+  S.cfg={participant:pid,device:$("device").value,posture:$("posture").value};
+  S.penalty=Math.max(0,parseFloat($("penalty").value)||0)*1000;
+  S.reps=parseInt($("reps").value,10);
+  S.blocks=shuffle(allLayouts());
+  S.bi=0;S.ti=0;S.trials=[];S.ok=0;S.slips=0;S.misses=0;S.practice=true;S.running=true;
+  S.sessionId="g"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  S.startedAt=new Date().toISOString();
+  $("blkTotal").textContent=String(S.blocks.length);
+  $("trTotal").textContent=String(S.reps);
+  readColors(); sizeStage(); show("task"); prepareBlock();
+}
+function prepareBlock(){
+  S.layout=S.practice?{dist:"edge",width:"w48",gap:"guarded"}:S.blocks[S.bi];
+  S.rects=layoutFor(S.layout); S.ti=0;
+  $("blkNow").textContent=S.practice?"–":String(S.bi+1);
+  $("trNow").textContent="1"; updateProgress();
+  const ov=$("overlay"); ov.classList.remove("hidden");
+  $("ovBig").textContent=S.practice?"Practice":"Block "+(S.bi+1)+" of "+S.blocks.length;
+  $("ovSmall").textContent=S.practice
+    ?"Three warm-up payments so the flow is familiar. Nothing here is recorded."
+    :"The layout has changed. Read the amount, tap it on the keypad, then confirm — quickly but accurately.";
+  draw();
+}
+$("ovBtn").addEventListener("click",()=>{$("overlay").classList.add("hidden");nextTrial();});
+
+function nextTrial(){
+  const n=S.practice?3:S.reps;
+  if(S.ti>=n){endBlock();return;}
+  S.target=String(10+Math.floor(Math.random()*90));
+  S.typed="";S.lastKey=null;S.missThisTrial=0;
+  S.payee=NAMES[Math.floor(Math.random()*NAMES.length)];
+  $("trNow").textContent=String(S.ti+1);
+  updateProgress(); draw();
+}
+function updateProgress(){
+  const total=S.blocks.length*S.reps, done=S.bi*S.reps+(S.practice?0:S.ti);
+  $("progBar").style.width=Math.min(100,100*done/total)+"%";
+  $("okCount").textContent=String(S.ok);
+  $("slipCount").textContent=String(S.slips);
+  $("missCount").textContent=String(S.misses);
+}
+
+/* ==========================================================
+   Input + timing
+   ========================================================== */
+cv.addEventListener("pointerdown",onDown);
+const inR=(r,x,y)=>x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h;
+
+function onDown(ev){
+  if(!S.running||!$("overlay").classList.contains("hidden"))return;
+  ev.preventDefault();
+  const t=performance.now();                                   // timestamp taken first
+  const b=cv.getBoundingClientRect();
+  const x=(ev.clientX-b.left)/S.scale, y=(ev.clientY-b.top)/S.scale;
+  const R=S.rects;
+
+  // --- amount entry phase ---
+  if(S.typed!==S.target){
+    for(const k of R.keys){
+      if(!inR(k,x,y))continue;
+      if(k.label==="<") S.typed=S.typed.slice(0,-1);
+      else if(S.typed.length<S.target.length) S.typed+=k.label;
+      if(S.typed===S.target){ S.lastKey={cx:k.cx,cy:k.cy,label:k.label}; S.t0=t; }  // clock starts here
+      draw(); return;
+    }
+    return;
+  }
+
+  // --- measured movement: last digit -> confirm ---
+  const onSend=inR(R.send,x,y), onCancel=inR(R.cancel,x,y);
+  if(!onSend&&!onCancel){ S.missThisTrial++; toast("miss","Missed — try again"); return; }
+
+  const MT=t-S.t0;                                             // movement time, ms
+  const f=S.lastKey;
+  const ax=R.send.cx-f.cx, ay=R.send.cy-f.cy;
+  const A=Math.hypot(ax,ay)||1;                                // target distance, px
+  const ux=ax/A, uy=ay/A;
+  const Wp=R.send.w*Math.abs(ux)+R.send.h*Math.abs(uy);        // projected width W'
+  const dx=(x-R.send.cx)*ux+(y-R.send.cy)*uy;
+  const dy=(x-R.send.cx)*(-uy)+(y-R.send.cy)*ux;
+
+  S.trials.push({
+    block:S.bi+1,trial:S.ti+1,
+    dist:S.layout.dist,width:S.layout.width,gap:S.layout.gap,
+    gapPx:GAP[S.layout.gap],Wnom:WIDTH[S.layout.width].h,
+    fromKey:f.label,amount:S.target,
+    A:Math.round(A*100)/100, Wp:Math.round(Wp*100)/100,
+    ID:Math.round(Math.log2(A/Wp+1)*10000)/10000,
+    mt:Math.round(MT*10)/10,
+    outcome:onSend?"confirm":"slip",
+    dx:Math.round(dx*100)/100, dy:Math.round(dy*100)/100,
+    misses:S.missThisTrial
+  });
+  S.misses+=S.missThisTrial;
+  if(onSend)S.ok++; else {S.slips++;toast("slip","Cancelled — payment lost");}
+  S.ti++; updateProgress();
+  setTimeout(nextTrial,onSend?140:440);
+}
+function endBlock(){
+  if(S.practice){S.practice=false;S.trials=[];S.ok=0;S.slips=0;S.misses=0;prepareBlock();return;}
+  S.bi++;
+  if(S.bi>=S.blocks.length){finish();return;}
+  prepareBlock();
+}
+
+/* ==========================================================
+   Analysis
+   ========================================================== */
+function bins(trials,K){
+  const hits=trials.filter(t=>t.outcome==="confirm").slice().sort((a,b)=>a.ID-b.ID);
+  K=Math.max(3,Math.min(K||8,Math.floor(hits.length/4)||3));
+  const out=[],per=hits.length/K;
+  for(let i=0;i<K;i++){
+    const c=hits.slice(Math.round(i*per),Math.round((i+1)*per));
+    if(c.length<2)continue;
+    const s=sd(c.map(t=>t.dx)), A=mean(c.map(t=>t.A)), Wp=mean(c.map(t=>t.Wp));
+    const We=s>0?4.133*s:Wp;
+    out.push({n:c.length,ID:mean(c.map(t=>t.ID)),IDe:Math.log2(A/We+1),A,Wp,We,
+              mt:mean(c.map(t=>t.mt)),sdMT:sd(c.map(t=>t.mt))});
+  }
+  return out;
+}
+function byKey(trials,fn,penalty){
+  const m=new Map();
+  trials.forEach(t=>{const k=fn(t);if(!m.has(k))m.set(k,[]);m.get(k).push(t);});
+  const out=[];
+  m.forEach((ts,k)=>{
+    const hits=ts.filter(t=>t.outcome==="confirm");
+    const mt=mean(hits.map(t=>t.mt));
+    const slip=ts.filter(t=>t.outcome==="slip").length/ts.length;
+    out.push({key:k,n:ts.length,mt,sdMT:sd(hits.map(t=>t.mt)),
+      A:mean(ts.map(t=>t.A)),Wp:mean(ts.map(t=>t.Wp)),Wnom:mean(ts.map(t=>t.Wnom)),
+      ID:mean(ts.map(t=>t.ID)),slip:100*slip,missPer:mean(ts.map(t=>t.misses)),
+      tp:mean(hits.map(t=>t.ID))/(mt/1000),
+      cost:mt+slip*penalty});
+  });
+  return out;
+}
+function analyse(trials,penalty){
+  penalty=penalty==null?S.penalty:penalty;
+  const B=bins(trials,8);
+  const fit=ols(B.map(b=>b.IDe),B.map(b=>b.mt));
+  const fitN=ols(B.map(b=>b.ID),B.map(b=>b.mt));
+  const hits=trials.filter(t=>t.outcome==="confirm");
+  const slipRate=trials.filter(t=>t.outcome==="slip").length/(trials.length||1);
+  return{bins:B,fit,fitN,penalty,
+    tp:mean(B.map(b=>b.IDe/(b.mt/1000))),
+    n:trials.length,meanMT:mean(hits.map(t=>t.mt)),
+    slipRate:100*slipRate,missPerTrial:mean(trials.map(t=>t.misses)),
+    cost:mean(hits.map(t=>t.mt))+slipRate*penalty,
+    byDist:byKey(trials,t=>t.dist,penalty),
+    byWidth:byKey(trials,t=>t.width,penalty),
+    byGap:byKey(trials,t=>t.gap,penalty),
+    byCond:byKey(trials,t=>t.dist+"|"+t.width+"|"+t.gap,penalty)};
+}
+
+/* ==========================================================
+   Plot
+   ========================================================== */
+function plot(B,fit,w,h){
+  w=w||640;h=h||360;
+  if(!B.length)return "<p class='note'>Not enough data to plot.</p>";
+  const m={l:58,r:16,t:14,b:44};
+  const xs=B.map(b=>b.IDe),ys=B.map(b=>b.mt);
+  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  const xp=Math.max(.2,(x1-x0)*.12),yp=Math.max(30,(y1-y0)*.15);
+  x0-=xp;x1+=xp;y0=Math.max(0,y0-yp);y1+=yp;
+  const X=v=>m.l+(v-x0)/(x1-x0)*(w-m.l-m.r),Y=v=>h-m.b-(v-y0)/(y1-y0)*(h-m.t-m.b);
+  let g="";
+  for(let i=0;i<=5;i++){
+    const v=x0+(x1-x0)*i/5,u=y0+(y1-y0)*i/5;
+    g+=`<line x1="${X(v)}" y1="${m.t}" x2="${X(v)}" y2="${h-m.b}" stroke="var(--grid)"/>`
+     + `<text x="${X(v)}" y="${h-m.b+18}" text-anchor="middle" font-size="11" fill="var(--muted)">${v.toFixed(1)}</text>`
+     + `<line x1="${m.l}" y1="${Y(u)}" x2="${w-m.r}" y2="${Y(u)}" stroke="var(--grid)"/>`
+     + `<text x="${m.l-8}" y="${Y(u)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${Math.round(u)}</text>`;
+  }
+  const line=(isFinite(fit.a)&&isFinite(fit.b))
+    ?`<line x1="${X(x0)}" y1="${Y(fit.a+fit.b*x0)}" x2="${X(x1)}" y2="${Y(fit.a+fit.b*x1)}" stroke="var(--accent)" stroke-width="2"/>`:"";
+  const pts=B.map(b=>`<circle cx="${X(b.IDe)}" cy="${Y(b.mt)}" r="5" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"><title>IDe ${b.IDe.toFixed(2)} · MT ${Math.round(b.mt)} ms · n=${b.n}</title></circle>`).join("");
+  return `<svg class="plot" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Movement time versus effective index of difficulty">
+    <rect x="${m.l}" y="${m.t}" width="${w-m.l-m.r}" height="${h-m.t-m.b}" fill="none" stroke="var(--border)"/>${g}${line}${pts}
+    <text x="${m.l+(w-m.l-m.r)/2}" y="${h-6}" text-anchor="middle" font-size="12" fill="var(--muted)">Effective index of difficulty (bits)</text>
+    <text x="14" y="${m.t+(h-m.t-m.b)/2}" text-anchor="middle" font-size="12" fill="var(--muted)" transform="rotate(-90 14 ${m.t+(h-m.t-m.b)/2})">Movement time (ms)</text></svg>`;
+}
+
+/* ==========================================================
+   Results
+   ========================================================== */
+const LBL={docked:"Docked under keypad",edge:"Bottom edge",nav:"Top nav bar",
+           w36:"36 px tall",w48:"48 px tall",w64:"64 px tall",
+           tight:"8 px gap",guarded:"40 px gap"};
+function factorTable(res){
+  const row=(k,r)=>`<tr><td>${esc(LBL[k]||k)}</td><td>${r.n}</td><td>${fmt(r.A,0)}</td><td>${fmt(r.Wp,1)}</td>
+    <td>${fmt(r.ID,2)}</td><td>${fmt(r.mt,0)}</td><td>${fmt(r.slip,1)}</td><td>${fmt(r.missPer,2)}</td>
+    <td>${fmt(r.tp,2)}</td><td>${fmt(r.cost,0)}</td></tr>`;
+  const sec=t=>`<tr><td colspan="10" style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">${t}</td></tr>`;
+  const grp=(arr,order)=>order.map(k=>{const r=arr.find(v=>v.key===k);return r?row(k,r):"";}).join("");
+  return `<table><thead><tr><th>Level</th><th>n</th><th>A (px)</th><th>W′</th><th>ID</th><th>MT (ms)</th>
+    <th>Slip %</th><th>Miss/tr</th><th>TP</th><th>E[cost] ms</th></tr></thead><tbody>
+    ${sec("Target distance")}${grp(res.byDist,["docked","edge","nav"])}
+    ${sec("Target width")}${grp(res.byWidth,["w36","w48","w64"])}
+    ${sec("Guard gap")}${grp(res.byGap,["tight","guarded"])}</tbody></table>`;
+}
+function recBox(res){
+  const d=k=>res.byDist.find(r=>r.key===k)||{}, w=k=>res.byWidth.find(r=>r.key===k)||{}, g=k=>res.byGap.find(r=>r.key===k)||{};
+  const best=res.byCond.slice().sort((a,b)=>a.cost-b.cost)[0];
+  const P=[];
+  P.push(`<b>Distance.</b> Docked under the keypad ${fmt(d("docked").mt,0)} ms · bottom edge ${fmt(d("edge").mt,0)} ms · top nav bar ${fmt(d("nav").mt,0)} ms. The nav-bar placement costs <b>${fmt((d("nav").mt||0)-(d("docked").mt||0),0)} ms</b> on every payment versus docking, and that is before any thumb-reach strain, which this desk-bound setup cannot capture.`);
+  P.push(`<b>Width.</b> 36 px ${fmt(w("w36").mt,0)} ms · 48 px ${fmt(w("w48").mt,0)} ms · 64 px ${fmt(w("w64").mt,0)} ms, with slips of ${fmt(w("w36").slip,1)}% / ${fmt(w("w48").slip,1)}% / ${fmt(w("w64").slip,1)}%. Because the approach is steeply vertical, W′ is driven by button height — widening a short button buys far less than its nominal area suggests.`);
+  const dSlip=(g("tight").slip||0)-(g("guarded").slip||0), dMT=(g("guarded").mt||0)-(g("tight").mt||0);
+  P.push(dSlip>0
+    ? `<b>Guard gap.</b> Going from 8 px to 40 px cut slips from <b>${fmt(g("tight").slip,1)}%</b> to <b>${fmt(g("guarded").slip,1)}%</b> for ${dMT>0?fmt(dMT,0)+" ms":"no measurable time cost"} per payment. At a ${fmt(res.penalty/1000,0)}-second recovery cost, expected cost falls from ${fmt(g("tight").cost,0)} ms to ${fmt(g("guarded").cost,0)} ms — the guard pays for itself.`
+    : `<b>Guard gap.</b> Slips did not fall with the wider gap (${fmt(g("tight").slip,1)}% → ${fmt(g("guarded").slip,1)}%), so endpoint scatter was already well inside 8 px. Effective width was ${fmt(mean(res.bins.map(b=>b.We)),1)} px against a projected ${fmt(mean(res.bins.map(b=>b.Wp)),1)} px. Don't conclude 8 px is safe from a seated desk session — scatter grows under motion and time pressure, which is the actual context.`);
+  if(best){
+    const [dd,ww,gg]=best.key.split("|");
+    P.push(`<b>Lowest expected cost:</b> ${esc(LBL[dd])}, ${esc(LBL[ww])}, ${esc(LBL[gg])} — ${fmt(best.mt,0)} ms movement, ${fmt(best.slip,1)}% slips, <b>${fmt(best.cost,0)} ms</b> expected cost per payment.`);
+  }
+  P.push(`<b>Caveat.</b> One participant, ${res.n} payments, ${esc(S.session?S.session.posture:"seated")}. Direction of effect only; act on it when several participants agree.`);
+  return P.map(p=>`<p>${p}</p>`).join("");
+}
+function renderResults(res){
+  $("who").textContent=`${S.session.participant} · ${S.session.device} · ${S.session.posture} · ${res.n} payments · ${new Date(S.session.startedAt).toLocaleString()}`;
+  $("sessionStats").innerHTML=[
+    ["Throughput",fmt(res.tp,2),"bits/s"],["Slope b",fmt(res.fit.b,1),"ms/bit"],
+    ["Intercept a",fmt(res.fit.a,1),"ms"],["R²",fmt(res.fit.r2,3),""],
+    ["Mean MT",fmt(res.meanMT,0),"ms"],["Slip rate",fmt(res.slipRate,1),"%"],
+    ["E[cost]",fmt(res.cost,0),"ms"]
+  ].map(([k,v,u])=>`<div class="stat"><div class="k">${k}</div><div class="v">${v} <span class="u">${u}</span></div></div>`).join("");
+  $("recBox").innerHTML=recBox(res);
+  $("plotBox").innerHTML=plot(res.bins,res.fit);
+  $("fitEq").textContent=`MT = ${fmt(res.fit.a,1)} + ${fmt(res.fit.b,1)} × IDe    (R² = ${fmt(res.fit.r2,3)}, ${res.fit.n} bins)`;
+  const We=mean(res.bins.map(b=>b.We)),Wp=mean(res.bins.map(b=>b.Wp));
+  $("fitNote").innerHTML=`Nominal ID gives R² = ${fmt(res.fitN.r2,3)}, slope ${fmt(res.fitN.b,1)} ms/bit. `+
+    `Mean effective width ${fmt(We,1)} px vs projected ${fmt(Wp,1)} px — `+
+    (We<Wp?`taps clustered tighter than the button, i.e. aiming more carefully than the target demanded — the signature of a control people are wary of.`
+          :`taps scattered wider than the button, i.e. speed bought at the cost of accuracy.`);
+  $("factorTable").innerHTML=factorTable(res);
+  const ranked=res.byCond.slice().sort((a,b)=>a.cost-b.cost);
+  $("condTable").innerHTML=`<table><thead><tr><th>Layout</th><th>n</th><th>A (px)</th><th>W nom</th><th>W′</th><th>ID</th>
+    <th>MT (ms)</th><th>Slip %</th><th>TP</th><th>E[cost] ms</th></tr></thead><tbody>`+
+    ranked.map((c,i)=>{const[d,w,g]=c.key.split("|");
+      return `<tr class="${i===0?"best":""}"><td>${esc(LBL[d])} · ${WIDTH[w].label} · ${GAP[g]}px</td><td>${c.n}</td>
+        <td>${fmt(c.A,0)}</td><td>${fmt(c.Wnom,0)}</td><td>${fmt(c.Wp,1)}</td><td>${fmt(c.ID,2)}</td>
+        <td>${fmt(c.mt,0)}</td><td>${fmt(c.slip,1)}</td><td>${fmt(c.tp,2)}</td><td>${fmt(c.cost,0)}</td></tr>`;}).join("")+`</tbody></table>`;
+}
+
+/* ==========================================================
+   Finish + save
+   ========================================================== */
+async function finish(){
+  S.running=false;
+  const res=analyse(S.trials); S.res=res;
+  S.session={id:S.sessionId,participant:S.cfg.participant,device:S.cfg.device,posture:S.cfg.posture,
+    penaltyMs:S.penalty,startedAt:S.startedAt,finishedAt:new Date().toISOString(),
+    screen:{scale:Math.round(S.scale*1000)/1000,dpr:window.devicePixelRatio||1,
+            pointer:matchMedia("(pointer: fine)").matches?"fine":"coarse"},
+    summary:{n:res.n,meanMT:Math.round(res.meanMT*10)/10,slipRate:Math.round(res.slipRate*100)/100,
+             tp:Math.round(res.tp*1000)/1000,a:Math.round(res.fit.a*10)/10,b:Math.round(res.fit.b*10)/10,
+             r2:Math.round(res.fit.r2*10000)/10000,cost:Math.round(res.cost)},
+    trials:S.trials};
+  $("tabResults").disabled=false;
+  show("results"); renderResults(res);
+  $("saveState").textContent="Saving…";
+  let saved=false,why="";
+  if(S.db){ try{ await S.db.doc("sessions/"+S.session.id).set(S.session); saved=true; }
+            catch(e){ why=" ("+(e&&e.code?e.code:"error")+")"; } }
+  if(!saved){
+    const ok=localSave(S.session);
+    $("saveState").textContent=ok?"Saved to this browser only"+why+". Download the CSV to keep it."
+                                 :"Not saved anywhere"+why+" — download the CSV now.";
+  }else $("saveState").textContent="Saved to the shared database. It appears under “All sessions”.";
+}
+
+/* ==========================================================
+   CSV export
+   ========================================================== */
+const TCOLS=["session","participant","device","posture","block","trial","distance_level","width_level","guard_gap_px",
+             "A_px","W_nominal_px","W_projected_px","ID_bits","MT_ms","outcome","dx_px","dy_px","misses_before","from_key","amount"];
+function trialRows(s){
+  return (s.trials||[]).map(t=>({session:s.id,participant:s.participant,device:s.device,posture:s.posture,
+    block:t.block,trial:t.trial,distance_level:t.dist,width_level:t.width,guard_gap_px:t.gapPx,
+    A_px:t.A,W_nominal_px:t.Wnom,W_projected_px:t.Wp,ID_bits:t.ID,MT_ms:t.mt,outcome:t.outcome,
+    dx_px:t.dx,dy_px:t.dy,misses_before:t.misses,from_key:t.fromKey,amount:t.amount}));
+}
+function toCSV(rows,cols){
+  const q=v=>{const s=v==null?"":String(v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
+  return [cols.join(",")].concat(rows.map(r=>cols.map(c=>q(r[c])).join(","))).join("\n");
+}
+async function offer(filename,textData){
+  if(S.downloads){
+    try{ await S.downloads.save({filename,data:textData}); return; }
+    catch(e){ if(e&&e.code==="declined")return; alert("Download unavailable here ("+(e&&e.code?e.code:"error")+")."); return; }
+  }
+  try{
+    const url=URL.createObjectURL(new Blob([textData],{type:"text/csv"}));
+    const a=document.createElement("a");a.href=url;a.download=filename;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(e){alert("Could not start the download.");}
+}
+$("csvTrials").addEventListener("click",()=>{ if(S.session) offer("guarded-confirm-trials-"+S.session.participant+".csv",toCSV(trialRows(S.session),TCOLS)); });
+$("csvConds").addEventListener("click",()=>{
+  if(!S.res)return;
+  const rows=S.res.byCond.map(c=>{const[d,w,g]=c.key.split("|");return{
+    session:S.session.id,participant:S.session.participant,distance_level:d,width_level:w,guard_gap_px:GAP[g],
+    n:c.n,A_px:+c.A.toFixed(1),W_nominal_px:+c.Wnom.toFixed(0),W_projected_px:+c.Wp.toFixed(2),
+    ID_bits:+c.ID.toFixed(3),MT_ms:+c.mt.toFixed(1),SD_ms:+c.sdMT.toFixed(1),
+    slip_pct:+c.slip.toFixed(2),misses_per_trial:+c.missPer.toFixed(3),
+    TP_bps:+c.tp.toFixed(3),expected_cost_ms:+c.cost.toFixed(0)};});
+  offer("guarded-confirm-conditions-"+S.session.participant+".csv",
+    toCSV(rows,["session","participant","distance_level","width_level","guard_gap_px","n","A_px","W_nominal_px",
+                "W_projected_px","ID_bits","MT_ms","SD_ms","slip_pct","misses_per_trial","TP_bps","expected_cost_ms"]));
+});
+$("csvAll").addEventListener("click",()=>{
+  const rows=[];S.all.forEach(s=>rows.push(...trialRows(s)));
+  if(!rows.length){alert("No saved sessions yet.");return;}
+  offer("guarded-confirm-all-trials.csv",toCSV(rows,TCOLS));
+});
+
+/* ==========================================================
+   All sessions
+   ========================================================== */
+$("refreshBtn").addEventListener("click",loadAll);
+async function loadAll(){
+  $("allSummary").textContent="Loading…";
+  let sessions=[],src="this browser";
+  if(S.db){
+    try{ const snap=await S.db.collection("sessions").limit(500).get();
+         sessions=snap.docs.map(d=>d.data()).filter(Boolean); src="shared database"; }
+    catch(e){ sessions=localLoad(); src="this browser (database unavailable)"; }
+  } else sessions=localLoad();
+  sessions.sort((a,b)=>String(b.startedAt).localeCompare(String(a.startedAt)));
+  S.all=sessions;
+  if(!sessions.length){ $("allSummary").textContent="No sessions saved yet ("+src+").";
+    $("sessTable").innerHTML="";$("pooledCard").style.display="none";return; }
+  const people=new Set(sessions.map(s=>s.participant)), all=[];
+  sessions.forEach(s=>{if(s.trials)all.push(...s.trials);});
+  $("allSummary").innerHTML=`<b>${sessions.length}</b> session${sessions.length>1?"s":""} · <b>${people.size}</b> participant${people.size>1?"s":""} · <b>${all.length}</b> payments · source: ${src}.`;
+  $("sessTable").innerHTML=`<table><thead><tr><th>Participant</th><th style="text-align:left">Input</th>
+    <th style="text-align:left">Posture</th><th>n</th><th>MT (ms)</th><th>Slip %</th><th>TP</th><th>b</th><th>R²</th>
+    <th style="text-align:left">Started</th></tr></thead><tbody>`+
+    sessions.map(s=>`<tr><td>${esc(s.participant)}</td><td style="text-align:left">${esc(s.device||"")}</td>
+      <td style="text-align:left">${esc(s.posture||"")}</td><td>${s.summary?s.summary.n:"–"}</td>
+      <td>${s.summary?fmt(s.summary.meanMT,0):"–"}</td><td>${s.summary?fmt(s.summary.slipRate,1):"–"}</td>
+      <td>${s.summary?fmt(s.summary.tp,2):"–"}</td><td>${s.summary?fmt(s.summary.b,0):"–"}</td>
+      <td>${s.summary?fmt(s.summary.r2,3):"–"}</td>
+      <td style="text-align:left">${new Date(s.startedAt).toLocaleString()}</td></tr>`).join("")+`</tbody></table>`;
+  if(all.length>40){
+    const p=analyse(all,sessions[0].penaltyMs||15000);
+    $("pooledCard").style.display="block";
+    $("pooledPlot").innerHTML=plot(p.bins,p.fit);
+    $("pooledEq").textContent=`MT = ${fmt(p.fit.a,1)} + ${fmt(p.fit.b,1)} × IDe   (R² = ${fmt(p.fit.r2,3)}, TP = ${fmt(p.tp,2)} bits/s, ${all.length} payments pooled)`;
+    $("pooledFactors").innerHTML=factorTable(p);
+  } else $("pooledCard").style.display="none";
+}
+
+readColors(); sizeStage();
+</script>
+</body>
+</html>
