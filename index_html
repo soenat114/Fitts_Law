@@ -1,1 +1,15 @@
-
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh"
+        content="0; url=./project1/guarded-confirm.html">
+  <title>Fitts’ Law 測試</title>
+</head>
+<body>
+  <p>正在進入測試頁面……</p>
+  <a href="./project1/guarded-confirm.html">
+    若沒有自動跳轉，請點此進入
+  </a>
+</body>
+</html>
